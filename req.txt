@@ -1,2 +1,5 @@
 pygame==2.6.1
-pymunk
+opencv-python
+torch
+torchvision
+numpy

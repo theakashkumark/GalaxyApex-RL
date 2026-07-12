@@ -1,5 +1,8 @@
 
 import time
+import cv2
+import torch
+import numpy as np
 import pygame
 from obstacles import *
 from spaceships import *
@@ -45,7 +48,7 @@ class HealthDrop():
 
 class AlienShooter():
 
-    def __init__(self,window_width,window_height,world_width,world_height,fps,sound=False):
+    def __init__(self,window_width,window_height,world_width,world_height,fps,sound=False,human=False):
         self.window_width = window_width
         self.window_height = window_height
         self.world_width = world_width
@@ -100,18 +103,35 @@ class AlienShooter():
 
         self.annocement_font = pygame.font.SysFont(None,100)
 
+        self.reset()
+
+        self.sound = sound
+
+        self.human=human
+
+    def reset(self):
+        self.done = False
+
+        self.level = 1
+        self.level_goal = 5
+        self.max_drone_count = 5
+        self.walls = walls_1
+        self.G_apex = GalaxyApex(self.world_width,self.world_height,self.walls)
+        self.G_apex_score = 0
+        self.G_apex_health = 5
+        self.max_drone_count = 5
+        self.drone_top_speed = 1
+        self.total_frames = 0
+        self.last_blaze_frame = 0
+        self.multi_blaze_count = 0
+        self.out_of_ammo_messaged_displayed = False
+        self.blaze_type = "single"
+
         self.blazers = []
         self.drone = []
 
-        self.multi_blaze_count = 10
-        self.drone_top_speed = 2
-        self.G_apex_health = 5
-        self.G_apex_score = 0
-        self.level_goal = 5
-        self.max_drone_count = 5
-        self.level = 1
-        self.sound = sound
-        self.out_of_ammo_messaged_displayed = False
+        return self._get_obs,self._get_info
+
 
     def start_next_level(self):
         self.level+=1
@@ -155,8 +175,10 @@ class AlienShooter():
         pygame.time.wait(4000)        
 
         if self.level>3:
-            sys.exit()
-            pygame.quit()
+            self.done = True
+            
+            #sys.exit()
+            #pygame.quit()
 
     def game_over(self):
 
@@ -169,28 +191,30 @@ class AlienShooter():
 
         pygame.display.flip()
 
+        self.done = True
+
         pygame.time.wait(2000)
 
         pygame.quit()
         sys.exit()
 
-        if self.level>3:
-            pygame.quit()
-            sys.exit()
+        #if self.level>3:
+        #    pygame.quit()
+        #    sys.exit()
     
     def fill_background(self,camera_x,camera_y):
         self.screen.blit(self.bg_image,(0-camera_x,0-camera_y))
 
-        score_surface = self.font.render(f"score: {self.G_apex_score}", True, (0,0,0))
+        score_surface = self.font.render(f"score: {self.G_apex_score}", True, (255,155,255))
         self.screen.blit(score_surface, (10,10))
 
-        health_surface = self.font.render(f"Health : {self.G_apex_health}", True, (0,0,0))
+        health_surface = self.font.render(f"Health : {self.G_apex_health}", True, (255,155,255))
         self.screen.blit(health_surface, (10,35))
 
-        level_surface = self.font.render(f"Level : {self.level}", True, (0,0,0))
+        level_surface = self.font.render(f"Level : {self.level}", True, (255,155,255))
         self.screen.blit(level_surface, (10,60))
 
-        ammo_surface = self.font.render(f"MultiBlaze Ammo : {self.multi_blaze_count}", True, (0,0,0))
+        ammo_surface = self.font.render(f"MultiBlaze Ammo : {self.multi_blaze_count}", True, (255,155,255))
         self.screen.blit(ammo_surface,(10,85))
 
         if self.out_of_ammo_messaged_displayed and self.blaze_type == "multi":
@@ -236,6 +260,32 @@ class AlienShooter():
         else:
             print("out of multi blaze ammo")
             self.out_of_ammo_messaged_displayed=True
+    
+    def _get_info(self):
+
+        blaze_type_num= 1 if self.blaze_type == 'single' else 2
+
+        return {
+            "health": self.G_apex_health,
+            "multiblaze_ammo": self.multi_blaze_count,
+            "blaze_type": blaze_type_num,
+            "blazes": len(self.blazers) 
+        }
+    
+    def _get_obs(self):
+
+        screen_array = pygame.surfarray.pixels3d(self.screen)
+
+        screen_array = np.transpose(screen_array, (1, 0, 2))
+
+        downscaled_image = cv2.resize(screen_array, (128, 128), interpolation = cv2.INTER_NEAREST)
+
+        grayscale = cv2.cvtColor(downscaled_image, cv2.COLOR_RGB2GRAY)
+        print(grayscale)
+
+        observation = torch.from_numpy(grayscale).float().unsqueeze(0)
+
+        return observation
 
 
 
@@ -243,31 +293,39 @@ class AlienShooter():
         #complete toggle pass method
         pass
         
+    def step(self, action, repeat=4):
 
-    def step(self):
-        for event in pygame.event.get():
+        total_reward = 0
+        for _ in range(repeat):
+            reward, done, truncated = self._step(action)
+            total_reward+=reward
+
+            if action==6:
+                action = 0
+
+            if done == True:
+                break
+
+        return self._get_obs(), total_reward, done, truncated, self._get_info()
             
-            if event.type==pygame.QUIT:
-                pygame.quit()
-                sys.exit()
 
-            elif event.type==pygame.KEYDOWN:
-                if event.key==pygame.K_TAB:
-                    self.blaze_type = 'single' if self.blaze_type=='multi' else 'multi'
-                    print(f'swtiched to {self.blaze_type}')
-                elif event.key==pygame.K_SPACE:
-                    if self.blaze_type=='single':
-                        self.fire_single_blaze()
-                    else:
-                        self.fire_multi_blaze()
-                elif event.key==pygame.K_ESCAPE:
-                    self.toggle_pause()
-                
-            elif event.type==pygame.MOUSEBUTTONDOWN:
-                if self.blaze_type=='single':
-                    self.fire_single_blaze()
-                else:
-                    self.fire_multi_blaze()
+    def _step(self,action):
+
+        self.total_frames+=1
+
+        up = True if action == 1 else False
+        down = True if action == 2 else False
+        left = True if action == 3 else False
+        right = True if action == 4 else False
+        #will do stwich gun 
+        fire = True if action == 6 else False
+        pause = False
+
+        reward, truncated = 0, False
+
+        if fire and (self.total_frames-self.last_blaze_frame>10):
+            self.fire_single_blaze()
+            self.last_blaze_frame=self.total_frames
             
         if self.paused:
             return
@@ -277,15 +335,12 @@ class AlienShooter():
         if len(self.drone)<self.max_drone_count and random.randint(0,100)<3:
             self.drone.append(AlienDrone(self.world_width,self.world_height,size=80,speed=random.randint(1,self.drone_top_speed)))
 
-
-        keys = pygame.key.get_pressed()
-
         new_G_apex_y = self.G_apex.y
 
-        if keys[pygame.K_w]:
+        if up:
             new_G_apex_y -= self.G_apex.speed
             self.G_apex.direction = 'up'
-        elif keys[pygame.K_s]:
+        elif down:
             new_G_apex_y += self.G_apex.speed
             self.G_apex.direction = 'down'
 
@@ -300,10 +355,10 @@ class AlienShooter():
 
         new_G_apex_x = self.G_apex.x
 
-        if keys[pygame.K_a]:
+        if left:
             new_G_apex_x-=self.G_apex.speed
             self.G_apex.direction = 'left'
-        elif keys[pygame.K_d]:
+        elif right:
             new_G_apex_x+=self.G_apex.speed
             self.G_apex.direction = 'right' 
 
@@ -331,12 +386,14 @@ class AlienShooter():
                 blazer = get_collision(dron.rect,self.blazers)
                 self.blazers.remove(blazer)
                 self.G_apex_score+=1
+                reward += 1
 
                 if random.randint(0,100)<=20:
                     self.energy_drop = HealthDrop(dron.rect.x,dron.rect.y)
 
             elif check_collision(dron.rect,[self.G_apex]):
-                self.G_apex_health-=1
+                self.G_apex_health -= 1
+                reward -= 1
             
             else:
                 self.temp_drone.append(dron)
@@ -373,6 +430,7 @@ class AlienShooter():
         if self.treasure_chest and self.G_apex.rect.colliderect(self.treasure_chest.rect):
             if not self.treasure_chest.is_opened:
                 self.treasure_chest.is_opened = True
+                reward += 1
 
                 self.multi_blaze_count = min(self.multi_blaze_count+5,20)
                 print(f"Multi Blaze refilled! Current Blaze : {self.multi_blaze_count}")
@@ -383,6 +441,7 @@ class AlienShooter():
         if self.energy_drop and self.G_apex.rect.colliderect(self.energy_drop.rect):
             self.energy_drop=None
             self.G_apex_health+=1
+            reward += 1
 
         if self.G_apex_score>self.level_goal:
             self.start_next_level()
@@ -391,4 +450,10 @@ class AlienShooter():
             self.game_over()
 
         pygame.display.flip()
-        self.clock.tick(self.fps)
+
+        if self.human:
+            self.clock.tick(self.fps)
+        else:
+            self.clock.tick()
+
+        return reward, self.done, truncated
