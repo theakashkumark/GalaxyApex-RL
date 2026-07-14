@@ -1,6 +1,9 @@
 from game import AlienShooter
 import pygame
 import sys
+import torch
+import numpy as np 
+import cv2
 
 window_width,window_height = 1200,800
 world_width,world_height = 1800,1200
@@ -36,5 +39,12 @@ while True:
         if keys[pygame.K_d]:
             action = 4
 
-    game.step(action=action)
+    observation, reward, done, truncated, info = game.step(action=action)
+
+    if reward!=0:
+        print("Reward: ",reward)
+        print("Done: ",done)
+
+        img_array = torch.clip(observation.squeeze(0),0,255).numpy().astype(np.uint8)
+        result = cv2.imwrite("temp/screen.jpg",img_array)
     

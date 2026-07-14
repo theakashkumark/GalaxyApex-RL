@@ -281,8 +281,7 @@ class AlienShooter():
         downscaled_image = cv2.resize(screen_array, (128, 128), interpolation = cv2.INTER_NEAREST)
 
         grayscale = cv2.cvtColor(downscaled_image, cv2.COLOR_RGB2GRAY)
-        print(grayscale)
-
+        
         observation = torch.from_numpy(grayscale).float().unsqueeze(0)
 
         return observation
