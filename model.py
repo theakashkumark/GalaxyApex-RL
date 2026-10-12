@@ -84,6 +84,12 @@ class G_apexNet(nn.Module):
         except FileNotFoundError:
             print(f"no weights file found at {filename}")
 
-    
+    def soft_update(target, source, tau=0.005):
+        for target_param,param in zip(target.parameters(), source.parameters()):
+            target_param.data.copy_(target_param * (1 - tau) + param * tau)
+
+    def hard_update(target, source):
+        for target_param, param in zip(target.parameters(), source.parameters):
+            target_param.data.copy_(param)
 
         
