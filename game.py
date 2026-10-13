@@ -11,6 +11,7 @@ from blaze import *
 import sys
 import random
 import math
+import gymnasium as gym
 
 class TreasureChest():
 
@@ -104,6 +105,8 @@ class AlienShooter():
         self.annocement_font = pygame.font.SysFont(None,100)
 
         self.reset()
+
+        action_space = gym.spaces.Discrete(7)
 
         self.sound = sound
 
