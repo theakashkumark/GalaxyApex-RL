@@ -106,7 +106,7 @@ class AlienShooter():
 
         self.reset()
 
-        action_space = gym.spaces.Discrete(7)
+        self.action_space = gym.spaces.Discrete(7)
 
         self.sound = sound
 
